@@ -1,11 +1,16 @@
+import 'dart:async'; // Added for Stopwatch
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:myapp/auth_service.dart';
 import 'package:myapp/dashboard_page.dart';
 import 'package:myapp/therapy_provider.dart';
-import 'package:myapp/personal_exercise_provider.dart'; // Import the new provider
+import 'package:myapp/personal_exercise_provider.dart';
+import 'package:myapp/role_selection_page.dart';
+import 'package:myapp/doctor_home_page.dart';
 import 'firebase_options.dart';
 
 // Imports for local notifications
@@ -13,7 +18,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
-// Global instance of the plugin
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
@@ -25,23 +29,19 @@ Future<void> _initializeNotifications() async {
     print('Error setting local location: $e');
     tz.setLocalLocation(tz.UTC);
   }
-
   const AndroidInitializationSettings initializationSettingsAndroid =
       AndroidInitializationSettings('@mipmap/ic_launcher');
-
   const DarwinInitializationSettings initializationSettingsDarwin =
       DarwinInitializationSettings(
     requestAlertPermission: true,
     requestBadgePermission: true,
     requestSoundPermission: true,
   );
-
   const InitializationSettings initializationSettings = InitializationSettings(
     android: initializationSettingsAndroid,
     iOS: initializationSettingsDarwin,
     macOS: initializationSettingsDarwin,
   );
-
   await flutterLocalNotificationsPlugin.initialize(
     initializationSettings,
     onDidReceiveNotificationResponse:
@@ -50,7 +50,6 @@ Future<void> _initializeNotifications() async {
     },
     onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
   );
-
   final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
       flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
@@ -65,16 +64,17 @@ void notificationTapBackground(NotificationResponse notificationResponse) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  print('[main] Initializing Firebase...');
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  print('[main] Firebase initialized.');
   await _initializeNotifications();
-
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => TherapyProvider()),
-        ChangeNotifierProvider(create: (context) => PersonalExerciseProvider()), // Add new provider
+        ChangeNotifierProvider(create: (context) => PersonalExerciseProvider()),
       ],
       child: const PanchakarmaPulseApp(),
     ),
@@ -83,7 +83,6 @@ void main() async {
 
 class PanchakarmaPulseApp extends StatelessWidget {
   const PanchakarmaPulseApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -103,17 +102,107 @@ class PanchakarmaPulseApp extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  Future<String?> _getUserRoleFromFirestore() async {
+    final functionStopwatch = Stopwatch()..start(); // Stopwatch for the whole function
+    print('[${DateTime.now()}] _AuthWrapperState: _getUserRoleFromFirestore START');
+
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      print('[${DateTime.now()}] _AuthWrapperState: No current user for Firestore role check.');
+      functionStopwatch.stop();
+      print('[${DateTime.now()}] _AuthWrapperState: _getUserRoleFromFirestore END (no user) - Took ${functionStopwatch.elapsedMilliseconds}ms');
+      return null;
+    }
+
+    print('[${DateTime.now()}] _AuthWrapperState: Checking Firestore for role of user: ${currentUser.uid}');
+    String? roleResult;
+    final firestoreCallStopwatch = Stopwatch(); // Stopwatch for the Firestore call only
+
+    try {
+      print('[${DateTime.now()}] _AuthWrapperState: BEFORE Firestore get() call.');
+      firestoreCallStopwatch.start();
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+      firestoreCallStopwatch.stop();
+      print('[${DateTime.now()}] _AuthWrapperState: AFTER Firestore get() call. Exists: ${userDoc.exists}. Took ${firestoreCallStopwatch.elapsedMilliseconds}ms');
+
+      if (userDoc.exists && userDoc.data() != null) {
+        final data = userDoc.data() as Map<String, dynamic>;
+        roleResult = data['role'] as String?;
+        print('[${DateTime.now()}] _AuthWrapperState: Role from Firestore: $roleResult');
+      } else {
+        print('[${DateTime.now()}] _AuthWrapperState: User document does not exist in Firestore or no role field.');
+        roleResult = null;
+      }
+    } catch (e, s) {
+      firestoreCallStopwatch.stop(); // Stop if it was running and an error occurred
+      print('[${DateTime.now()}] _AuthWrapperState: Error fetching role from Firestore: $e');
+      print('[${DateTime.now()}] _AuthWrapperState: Stacktrace: $s');
+      print('[${DateTime.now()}] _AuthWrapperState: Firestore call (if started) took ${firestoreCallStopwatch.elapsedMilliseconds}ms before error.');
+      roleResult = null;
+    }
+    functionStopwatch.stop();
+    print('[${DateTime.now()}] _AuthWrapperState: _getUserRoleFromFirestore END - Result: $roleResult. Total took ${functionStopwatch.elapsedMilliseconds}ms');
+    return roleResult;
+  }
 
   @override
   Widget build(BuildContext context) {
+    print('[${DateTime.now()}] _AuthWrapperState: Build method called.');
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          return const DashboardPage();
+      builder: (context, authSnapshot) {
+        print('[${DateTime.now()}] _AuthWrapperState: Auth StreamBuilder - ConnectionState: ${authSnapshot.connectionState}, HasData: ${authSnapshot.hasData}, HasError: ${authSnapshot.hasError}, Error: ${authSnapshot.error}');
+        if (authSnapshot.connectionState == ConnectionState.waiting) {
+          print('[${DateTime.now()}] _AuthWrapperState: Auth state WAITING (showing loading indicator).');
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
+
+        if (authSnapshot.hasData && authSnapshot.data != null) {
+          print('[${DateTime.now()}] _AuthWrapperState: Auth state HAS DATA. User logged in: ${authSnapshot.data!.uid}. Now calling FutureBuilder for role.');
+          return FutureBuilder<String?>(
+            future: _getUserRoleFromFirestore(),
+            builder: (context, roleSnapshot) {
+              print('[${DateTime.now()}] _AuthWrapperState: Role FutureBuilder - ConnectionState: ${roleSnapshot.connectionState}, HasData: ${roleSnapshot.hasData}, HasError: ${roleSnapshot.hasError}, Error: ${roleSnapshot.error}, Data: ${roleSnapshot.data}');
+              if (roleSnapshot.connectionState == ConnectionState.waiting) {
+                print('[${DateTime.now()}] _AuthWrapperState: Role future WAITING for Firestore (showing loading indicator).');
+                return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              }
+
+              if (roleSnapshot.hasError) {
+                print('[${DateTime.now()}] _AuthWrapperState: Role future HAS ERROR: ${roleSnapshot.error}. Navigating to RoleSelectionPage as fallback.');
+                return const RoleSelectionPage(); 
+              }
+
+              final role = roleSnapshot.data;
+              print('[${DateTime.now()}] _AuthWrapperState: Role future HAS DATA. Role: $role');
+
+              if (role == null) {
+                print('[${DateTime.now()}] _AuthWrapperState: No role found in Firestore, navigating to RoleSelectionPage.');
+                return const RoleSelectionPage();
+              } else if (role == 'user') {
+                print('[${DateTime.now()}] _AuthWrapperState: Role is \'user\', navigating to DashboardPage.');
+                return const DashboardPage();
+              } else if (role == 'doctor') {
+                print('[${DateTime.now()}] _AuthWrapperState: Role is \'doctor\', navigating to DoctorHomePage.');
+                return const DoctorHomePage();
+              } else {
+                print('[${DateTime.now()}] _AuthWrapperState: Unknown role \'$role\', navigating to RoleSelectionPage as fallback.');
+                return const RoleSelectionPage();
+              }
+            },
+          );
+        }
+        print('[${DateTime.now()}] _AuthWrapperState: Auth state NO DATA. User not logged in. Navigating to LoginPage.');
         return const LoginPage();
       },
     );
@@ -122,14 +211,12 @@ class AuthWrapper extends StatelessWidget {
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
-
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
   final AuthService _authService = AuthService();
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -174,7 +261,7 @@ class _LoginPageState extends State<LoginPage> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Google Sign-In failed or cancelled.')),
                       );
-                    }
+                    } 
                   },
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14.0),

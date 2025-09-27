@@ -24,6 +24,17 @@ class _DashboardPageState extends State<DashboardPage> {
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
+  Future<void> _signOut() async {
+    print('[DashboardPage] _signOut method called.'); // ADDED
+    try {
+      await FirebaseAuth.instance.signOut();
+      print('[DashboardPage] FirebaseAuth.instance.signOut() completed.'); // ADDED
+    } catch (e) {
+      print('[DashboardPage] Error during signOut: $e'); // ADDED
+    }
+    // AuthWrapper in main.dart will handle navigation to LoginPage
+  }
+
   Widget _buildDashboardContent(TherapyProvider therapyProvider) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -125,13 +136,10 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     final therapyProvider = Provider.of<TherapyProvider>(context);
 
-    // List of widgets for the body, corresponding to bottom nav items
-    // Order: Dashboard, Profile, Training
     final List<Widget> pages = [
-      _buildDashboardContent(therapyProvider), // Index 0
-      _buildProfilePage(),                   // Index 1
-      const PersonalTrainingPage(),          // Index 2 (New Page)
-      // Index 3 (Scheduling) navigates away, so no specific page widget here.
+      _buildDashboardContent(therapyProvider), 
+      _buildProfilePage(),                   
+      const PersonalTrainingPage(),          
     ];
 
     return Scaffold(
@@ -146,26 +154,32 @@ class _DashboardPageState extends State<DashboardPage> {
             // TODO: Implement drawer functionality if needed
           },
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.black),
+            tooltip: 'Logout',
+            onPressed: () async {
+              print('[DashboardPage] Logout button pressed.'); // ADDED
+              await _signOut();
+            },
+          ),
+        ],
       ),
       body: Builder(
         builder: (BuildContext scaffoldContext) {
-          // Ensure we don't try to access an out-of-bounds index if _bottomNavIndex is for Scheduling
           if (_bottomNavIndex < pages.length) {
              return pages[_bottomNavIndex];
           } 
-          return Container(); // Fallback for scheduling tab if it were to show a body
+          return Container(); 
         }
       ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _bottomNavIndex > 2 ? 0 : _bottomNavIndex, // Keep selection on a valid tab
+        currentIndex: _bottomNavIndex > 2 ? 0 : _bottomNavIndex, 
         onTap: (index) {
-          if (index == 3) { // Scheduling tab (now at index 3)
+          if (index == 3) { 
             Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => const BookingPage()),
             );
-            // Optionally, reset _bottomNavIndex to the previous tab or default (e.g., 0)
-            // This prevents the "Scheduling" tab from appearing selected when returning.
-            // For now, it will revert to the last visually selected tab based on currentIndex logic above.
           } else {
             setState(() {
               _bottomNavIndex = index;
@@ -178,7 +192,7 @@ class _DashboardPageState extends State<DashboardPage> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: 'Training'), // New Tab
+          BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: 'Training'), 
           BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Scheduling'),
         ],
       ),
