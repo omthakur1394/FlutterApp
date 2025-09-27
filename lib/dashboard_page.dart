@@ -3,7 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:myapp/therapy_provider.dart';
 import 'package:myapp/booking_page.dart';
-import 'package:myapp/personal_training_page.dart'; // Import PersonalTrainingPage
+import 'package:myapp/personal_training_page.dart';
+import 'package:myapp/doctor_list_page.dart'; // Import DoctorListPage
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -18,54 +19,95 @@ class _DashboardPageState extends State<DashboardPage> {
   final List<String> _appBarTitles = const [
     'Dashboard',
     'Profile',
-    'Personal Training', // Added new title
-    'Schedule Session'   // For the navigation action
+    'Personal Training',
+    'Schedule Session'
   ];
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   Future<void> _signOut() async {
-    print('[DashboardPage] _signOut method called.'); // ADDED
+    print('[DashboardPage] _signOut method called.');
     try {
       await FirebaseAuth.instance.signOut();
-      print('[DashboardPage] FirebaseAuth.instance.signOut() completed.'); // ADDED
+      print('[DashboardPage] FirebaseAuth.instance.signOut() completed.');
     } catch (e) {
-      print('[DashboardPage] Error during signOut: $e'); // ADDED
+      print('[DashboardPage] Error during signOut: $e');
     }
-    // AuthWrapper in main.dart will handle navigation to LoginPage
   }
 
-  Widget _buildDashboardContent(TherapyProvider therapyProvider) {
+  Widget _buildDashboardContent(BuildContext context, TherapyProvider therapyProvider) { // Added context
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Card to navigate to Doctor List Page
+          Card(
+            elevation: 3,
+            margin: const EdgeInsets.only(bottom: 20),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const DoctorListPage()),
+                );
+              },
+              borderRadius: BorderRadius.circular(12.0),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.medical_services_outlined, color: Colors.green[700], size: 36),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Text(
+                        'Find Doctors & Therapy Centers',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, color: Colors.grey),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
           const Text('Upcoming Sessions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          ListView.separated(
-            physics: const NeverScrollableScrollPhysics(),
-            shrinkWrap: true,
-            itemCount: therapyProvider.sessions.length,
-            itemBuilder: (context, index) {
-              final session = therapyProvider.sessions[index];
-              return _buildSessionCard(session, therapyProvider);
-            },
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-          ),
+          therapyProvider.sessions.isEmpty
+            ? const Center(child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20.0),
+                child: Text("No upcoming sessions.", style: TextStyle(color: Colors.grey)),
+              ))
+            : ListView.separated(
+                physics: const NeverScrollableScrollPhysics(),
+                shrinkWrap: true,
+                itemCount: therapyProvider.sessions.length,
+                itemBuilder: (context, index) {
+                  final session = therapyProvider.sessions[index];
+                  return _buildSessionCard(session, therapyProvider);
+                },
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
+              ),
           const SizedBox(height: 24),
           const Text('Therapy Progress', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          ListView.separated(
-            physics: const NeverScrollableScrollPhysics(),
-            shrinkWrap: true,
-            itemCount: therapyProvider.progressList.length,
-            itemBuilder: (context, index) {
-              final progress = therapyProvider.progressList[index];
-              return _buildProgressCard(progress);
-            },
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-          ),
+           therapyProvider.progressList.isEmpty
+            ? const Center(child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20.0),
+                child: Text("No progress to show yet.", style: TextStyle(color: Colors.grey)),
+              ))
+            : ListView.separated(
+                physics: const NeverScrollableScrollPhysics(),
+                shrinkWrap: true,
+                itemCount: therapyProvider.progressList.length,
+                itemBuilder: (context, index) {
+                  final progress = therapyProvider.progressList[index];
+                  return _buildProgressCard(progress);
+                },
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
+              ),
         ],
       ),
     );
@@ -137,7 +179,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final therapyProvider = Provider.of<TherapyProvider>(context);
 
     final List<Widget> pages = [
-      _buildDashboardContent(therapyProvider), 
+      _buildDashboardContent(context, therapyProvider), // Pass context here
       _buildProfilePage(),                   
       const PersonalTrainingPage(),          
     ];
@@ -159,7 +201,7 @@ class _DashboardPageState extends State<DashboardPage> {
             icon: const Icon(Icons.logout, color: Colors.black),
             tooltip: 'Logout',
             onPressed: () async {
-              print('[DashboardPage] Logout button pressed.'); // ADDED
+              print('[DashboardPage] Logout button pressed.');
               await _signOut();
             },
           ),

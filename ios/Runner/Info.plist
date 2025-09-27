@@ -45,5 +45,12 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Location Permissions for geolocator -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs access to location to pin your current location for the therapy center.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app needs access to location to pin your current location for the therapy center and for background updates if applicable.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>This app needs access to location to pin your current location for the therapy center.</string>
 </dict>
 </plist>
